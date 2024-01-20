@@ -1,0 +1,107 @@
+GET http://localhost:9000/users
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoxLCJ1c2VyX3JvbGUiOiJBRE1JTiIsImlhdCI6MTcwNTE3MTE2NH0.JqDGZn4OxhbZwxekIbet4XdJSyexYckME27ktIFd4QI
+###
+
+GET http://localhost:9000/user/14
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoxLCJ1c2VyX3JvbGUiOiJBRE1JTiIsImlhdCI6MTcwNTE2ODQwNX0.oRcCTVqmryiAr_4wHEn533CscKFs2HJIMH_MbTwXK6U
+Content-Type: application/json
+###
+
+POST http://localhost:9000/user
+Content-Type: application/json
+
+{
+    "user_first_name": "user7fn",
+    "user_last_name": "user7ln",
+    "user_email": "user2@gmail.com",
+    "user_password": "password",
+    "user_phone": "(647) 123-1234",
+    "user_role": "ADMIN"
+}
+
+###
+
+PUT http://localhost:9000/user
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjo0LCJ1c2VyX3JvbGUiOiJBRE1JTiIsImlhdCI6MTcwNTE3MDAzM30.tdXuA42Sj7wy_lTBKj6hdAcNzPJ1SorzjMP5FtG2cMk
+Content-Type: application/json
+
+{
+    "user_email": "user2@gmail.com",
+    "user_role": "USER"
+}
+
+###
+
+DELETE http://localhost:9000/user
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoxLCJ1c2VyX3JvbGUiOiJBRE1JTiIsImlhdCI6MTcwNTE3MTE2NH0.JqDGZn4OxhbZwxekIbet4XdJSyexYckME27ktIFd4QI
+Content-Type: application/json
+
+{
+    "user_id": 13
+}
+
+###
+    
+POST http://localhost:9000/login
+Content-Type: application/json
+
+{
+    "user_email": "user1@gmail.com",
+    "user_password": "password"
+}
+
+###
+    
+POST http://localhost:9000/token
+Content-Type: application/json
+
+{
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoxLCJ1c2VyX3JvbGUiOiJBRE1JTiIsImlhdCI6MTcwNTE5NzcxNn0.Gn4R3Zzkee8Je2jh1h5nnLKNpIsQksmoZbRPwcy7-po"
+}
+###
+
+DELETE http://localhost:9000/logout
+Content-Type: application/json
+
+{
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoxNCwidXNlcl9yb2xlIjoiQURNSU4iLCJpYXQiOjE3MDUxODE3MzV9.CM17QNgBQD6yGJBdxvcJUdcrv-hvSI4tn3dH_CZeK7s"
+}
+
+###
+GET http://localhost:9000/products
+
+
+
+###
+
+GET http://localhost:9000/product/1 
+
+###
+POST http://localhost:9000/product
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoxLCJ1c2VyX3JvbGUiOiJBRE1JTiIsImlhdCI6MTcwNTE5NzczMSwiZXhwIjoxNzA1ODAyNTMxfQ.jTZAJOB20zH1wcBtdtj3vSqC8bc7ryPsqcrRgrk-fiU
+Content-Type: application/json
+{
+    "product_name": "product1",
+    "product_description": "product_descption",
+    "product_price": 10.99
+
+}
+
+###
+
+PUT http://localhost:9000/product
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoxLCJ1c2VyX3JvbGUiOiJBRE1JTiIsImlhdCI6MTcwNTE5NzczMSwiZXhwIjoxNzA1ODAyNTMxfQ.jTZAJOB20zH1wcBtdtj3vSqC8bc7ryPsqcrRgrk-fiU
+Content-Type: application/json
+
+{
+    "product_name": "product2",
+    "product_id": 2
+}
+###
+DELETE http://localhost:9000/product
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoxLCJ1c2VyX3JvbGUiOiJBRE1JTiIsImlhdCI6MTcwNTE5NzczMSwiZXhwIjoxNzA1ODAyNTMxfQ.jTZAJOB20zH1wcBtdtj3vSqC8bc7ryPsqcrRgrk-fiU
+Content-Type: application/json
+
+{
+    "product_id": 2
+}
