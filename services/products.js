@@ -67,12 +67,12 @@ const updateProduct = async (request, response) => {
     if (!product_id) {
         return response.status(400).json({ error: 'Bad request' });
     }
-    // product can only be updated by admin or owner
-    if ((user_id != product_owner) && (user_role != 'ADMIN')) {
-        return response.status(403).json({ error: 'User unauthorized' });
-    }
-    // ignored product_owner durning update
     try {
+        const [{product_owner}] = await getProductById(product_id);
+        // product can only be updated by admin or owner
+        if ((user_id != product_owner) && (user_role != 'ADMIN')) {
+            return response.status(403).json({ error: 'User unauthorized' });
+        }
         await knex('products')
             .where('product_id', product_id)
             .update({...rest});
@@ -88,11 +88,12 @@ const deleteProduct = async (request, response) => {
     if (!product_id) {
         return response.status(400).json({ error: 'Bad request' });
     }
-    // product can only be updated by admin or owner
-    if ((user_id != product_owner) && (user_role != 'ADMIN')) {
-        return response.status(403).json({ error: 'User unauthorized' });
-    }
     try {
+        const [{product_owner}] = await getProductById(product_id);
+        // product can only be DELETED by admin or owner
+        if ((user_id != product_owner) && (user_role != 'ADMIN')) {
+            return response.status(403).json({ error: 'User unauthorized' });
+        }
         const product = await getProductById(product_id);
         if (product.length == 0) {
             return response.status(401).json({ error: 'Entry not found' });

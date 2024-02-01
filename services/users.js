@@ -93,7 +93,7 @@ const updateUser = async (request, response) => {
     const req_user_id = request.body.user_id;
     // user can only be updated by admin or the same person
     if ((user_id != req_user_id) && (user_role != 'ADMIN')) {
-        response.status(403).send(`User unauthorized`);
+        response.status(403).json({ error: 'User unauthorized' });
         return;
     }
     // hash the password if it is in the req
@@ -116,7 +116,7 @@ const deleteUser = async (request, response) => {
     const req_user_id = request.body.user_id;
     // user can only be removed by admin or the same person
     if ((user_id != req_user_id) && (user_role != 'ADMIN')) {
-        response.status(403).send(`User unauthorized`);
+        response.status(403).json({ error: 'User unauthorized' });
         return;
     }
     try {
