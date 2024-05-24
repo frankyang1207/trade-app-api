@@ -1,5 +1,6 @@
 const connection = require('../knexfile')[process.env.NODE_ENV || 'development'];
 const knex = require('knex')(connection);
+const {formidable} = require('formidable');
 const dotenv = require('dotenv');
 dotenv.config();
 
@@ -43,7 +44,14 @@ const getProductById = async (product_id) => {
 
 
 const createProduct = async (request, response) => {
-    const { product_name, product_description, product_price } = request.body;
+    const { product_image_link,
+            product_name, 
+            product_description,
+            product_price,
+            product_quantity,
+            product_for_male,    
+            product_for_female
+        } = request.body;
     const { user_id, user_role } = request.user;
     if (!product_name || !product_price ) { 
         return response.status(400).json({ error: 'Bad request' });
@@ -54,7 +62,17 @@ const createProduct = async (request, response) => {
     try {
         const [{product_id}] = await knex('products')
             .returning('product_id')
-            .insert({product_name, product_description, product_price, 'product_owner': user_id });
+            .insert({
+                product_image_link,
+                product_name, 
+                product_price,
+                product_quantity,
+                product_for_male,    
+                product_for_female,
+                product_description, 
+                product_created_datetime: new Date(),
+                product_modified_datetime: new Date(),
+                product_owner: user_id });
         response.status(201).json({ product_id, message: 'Product added successfully' });
     } catch (error) {
         response.status(500).json({ error: error.message });
@@ -76,14 +94,14 @@ const updateProduct = async (request, response) => {
         await knex('products')
             .where('product_id', product_id)
             .update({...rest});
-        response.status(200).json({ message: `Product modified with ID: ${product_id}` });
+        response.status(200).json({ message: `Product(ID: ${product_id}) updated` });
     } catch (error) {
         response.status(500).json({ error: error.message });
     }
 }
 
 const deleteProduct = async (request, response) => {
-    const { product_id, product_owner, ...rest } = request.body;
+    const { product_id, ...rest } = request.body;
     const { user_id, user_role } = request.user;
     if (!product_id) {
         return response.status(400).json({ error: 'Bad request' });
@@ -101,7 +119,7 @@ const deleteProduct = async (request, response) => {
         await knex('products')
             .where('product_id', product_id)
             .del();
-        response.status(200).json({ message: `Product deleted with ID: ${product_id}` });
+        response.status(200).json({ message: `Product(ID: ${product_id}) removed` });
     } catch (error) {
         response.status(500).json({ error: error.message });
     }

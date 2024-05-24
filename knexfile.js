@@ -17,6 +17,18 @@ module.exports = {
       }
   },
 
+  test: {
+    client: 'pg',
+    connection: {
+      host: 'localhost',
+      user: 'frank',
+      password: 'password',
+      database: 'trade_db',},
+      migrations: {
+        tableName: 'knex_migrations'
+      }
+  },
+
   staging: {
     client: 'postgresql',
     connection: {

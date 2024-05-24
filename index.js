@@ -3,9 +3,11 @@ const bodyParser = require('body-parser');
 const dotenv = require('dotenv');
 const user_router = require('./routes/users');
 const product_router = require('./routes/products')
+const s3_router = require('./routes/s3Uploader')
+const stripe = require('./routes/stripe')
 const app = express();
 const cors = require('cors');
-const port = process.env.PORT || 9000;
+app.use('/webhook', express.raw({ type: 'application/json' }));
 
 app.use(cors());
 app.use(bodyParser.json());
@@ -18,10 +20,8 @@ dotenv.config();
 
 app.use(user_router);
 app.use(product_router);
+app.use(s3_router);
+app.use(stripe)
 
 
-
-
-app.listen(port, () => console.log(`listening on port: ${port}`));
-
-
+module.exports = app;
