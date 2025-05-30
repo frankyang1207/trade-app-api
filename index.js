@@ -7,6 +7,9 @@ const s3_router = require('./routes/s3Uploader')
 const stripe = require('./routes/stripe')
 const app = express();
 const cors = require('cors');
+
+dotenv.config();
+
 app.use('/webhook', express.raw({ type: 'application/json' }));
 
 app.use(cors());
@@ -16,8 +19,10 @@ app.use(
     extended: true,
   })
 );
-dotenv.config();
 
+app.get('/', (req, res) => {
+  res.send('Backend is live ✅');
+});
 app.use(user_router);
 app.use(product_router);
 app.use(s3_router);
