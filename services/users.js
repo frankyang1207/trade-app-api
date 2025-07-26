@@ -97,7 +97,7 @@
             const data = { user_id, user_role  };
             const access_token = generateAccessToken(data);
             
-            const refresh_token = jwt.sign(data, process.env.REFRESH_TOKEN_SECRET);
+            const refresh_token = jwt.sign(data, process.env.REACT_APP_REFRESH_TOKEN_SECRET);
             await knex('tokens').insert({ token_user_id: user_id, token_content: refresh_token });
 
             response.status(201).json({
@@ -123,6 +123,7 @@
             response.status(403).json({ error: 'User unauthorized' });
             return;
         }
+        console.log(request.body);
         // hash the password if it is in the req
         let user_password_hash = "";
         if (user_password) {
@@ -131,7 +132,7 @@
         // if duplicate email
         if (user_email) {
             const user = await getUserByEmail(user_email);
-            if (user) {
+            if (user && user.user_id != user_id) {
                 return response.status(409).json({ error: 'Account with this email already exists' });
             }
         }
@@ -204,7 +205,7 @@
                 'refresh_token': token.token_content
                 });
             }
-            const refresh_token = jwt.sign(data, process.env.REFRESH_TOKEN_SECRET)
+            const refresh_token = jwt.sign(data, process.env.REACT_APP_REFRESH_TOKEN_SECRET)
             await knex('tokens')
                 .insert({'token_user_id': user.user_id, 'token_content': refresh_token });
             response.json({ 
@@ -253,7 +254,7 @@
             if (!isLoggedIn) {
                 return response.status(403).json({ error: 'Invalid session' });
             }
-            jwt.verify(refresh_token, process.env.REFRESH_TOKEN_SECRET, (error, user) => {
+            jwt.verify(refresh_token, process.env.REACT_APP_REFRESH_TOKEN_SECRET, (error, user) => {
                 if (error) {
                     return response.status(403).json({ error: 'Invalid session' });
                 }
@@ -269,7 +270,7 @@
 
 
     const generateAccessToken = (user) => {
-        return(jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, { expiresIn: '7d' }));
+        return(jwt.sign(user, process.env.REACT_APP_ACCESS_TOKEN_SECRET, { expiresIn: '7d' }));
     }
 
 

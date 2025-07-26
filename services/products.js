@@ -11,6 +11,7 @@ const getProducts = async (request, response) => {
             .select('*');
         return response.status(200).json(products);
     } catch (error) {
+        console.log(error)
         return response.status(500).send(error.message);
     }
 }
@@ -27,6 +28,7 @@ const getProduct = async (request, response) => {
             .where('product_id', product_id);
         response.status(200).json(product);
     } catch (error) {
+        console.log(error)
         response.status(500).json({ error: error.message });
     }
 }
@@ -38,6 +40,7 @@ const getProductById = async (product_id) => {
             .where('product_id', product_id);
         return product;
     } catch (error) {
+        console.log(error)
         response.status(500).json({ error: error.message });
     }
 }
@@ -75,6 +78,7 @@ const createProduct = async (request, response) => {
                 product_owner: user_id });
         response.status(201).json({ product_id, message: 'Product added successfully' });
     } catch (error) {
+        console.log(error)
         response.status(500).json({ error: error.message });
     }
 }
@@ -96,6 +100,7 @@ const updateProduct = async (request, response) => {
             .update({...rest});
         response.status(200).json({ message: `Product(ID: ${product_id}) updated` });
     } catch (error) {
+        console.log(error)
         response.status(500).json({ error: error.message });
     }
 }
@@ -121,6 +126,7 @@ const deleteProduct = async (request, response) => {
             .del();
         response.status(200).json({ message: `Product(ID: ${product_id}) removed` });
     } catch (error) {
+        console.log(error)
         response.status(500).json({ error: error.message });
     }
 }

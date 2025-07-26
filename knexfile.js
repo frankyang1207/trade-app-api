@@ -7,10 +7,14 @@ module.exports = {
 
   development: {
   client: 'pg',
-  connection: process.env.DATABASE_URL,
-    migrations: {
-      tableName: 'knex_migrations'
-    }
+  connection: {
+      host: 'localhost',
+      user: 'frank',
+      password: 'password',
+      database: 'trade_db',},
+      migrations: {
+        tableName: 'knex_migrations'
+      }
   },
 
   test: {

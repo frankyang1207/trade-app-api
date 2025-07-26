@@ -119,8 +119,6 @@ router.post('/webhook', express.raw({type: 'application/json'}), (request, respo
   // Handle the event
   if (eventType === 'checkout.session.completed') {
     stripe.customers.retrieve(data.customer).then((customer) => {
-      console.log(customer);
-      console.log('data', data)
     }).catch((err) => console.log(err.message))
   }
 
