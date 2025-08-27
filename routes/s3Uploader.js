@@ -3,15 +3,15 @@
 // Libraries
 const aws = require("aws-sdk");
 const s3Uploader = require("express").Router();
-const aws_region = process.env.AWS_DEFAULT_REGION;
+const aws_region = process.env.REACT_APP_AWS_DEFAULT_REGION;
 
 aws.config.update({
   region: aws_region,
-  accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-  secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+  accessKeyId: process.env.REACT_APP_AWS_ACCESS_KEY_ID,
+  secretAccessKey: process.env.REACT_APP_AWS_SECRET_ACCESS_KEY,
 });
 
-const S3_BUCKET = process.env.S3_BUCKET;
+const S3_BUCKET = process.env.REACT_APP_S3_BUCKET;
 
 s3Uploader.post("/s3_signed_url", async (req, res) => {
   const s3 = new aws.S3();
