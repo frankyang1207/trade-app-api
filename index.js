@@ -10,9 +10,10 @@ const cors = require('cors');
 
 dotenv.config();
 
+app.use(cors());
+
 app.use('/webhook', express.raw({ type: 'application/json' }));
 
-app.use(cors());
 app.use(bodyParser.json());
 app.use(
   bodyParser.urlencoded({
