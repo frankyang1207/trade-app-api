@@ -3,30 +3,38 @@
 // Libraries
 const aws = require("aws-sdk");
 const s3Uploader = require("express").Router();
-const aws_region = process.env.REACT_APP_AWS_DEFAULT_REGION;
+const aws_region = process.env.AWS_DEFAULT_REGION;
 
+// Configure AWS SDK with credentials & region
 aws.config.update({
   region: aws_region,
-  accessKeyId: process.env.REACT_APP_AWS_ACCESS_KEY_ID,
-  secretAccessKey: process.env.REACT_APP_AWS_SECRET_ACCESS_KEY,
+  accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+  secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
 });
 
-const S3_BUCKET = process.env.REACT_APP_S3_BUCKET;
+const S3_BUCKET = process.env.S3_BUCKET;
+
+/**
+ * S3 Signed URL Uploader Route
+ */
 
 s3Uploader.post("/s3_signed_url", async (req, res) => {
   const s3 = new aws.S3();
 
+  // Extract file name & type from request body
   const fileName = req.body.fileName;
   const fileType = req.body.fileType;
 
+  // Configure S3 pre-signed URL parameters
   const params = {
     Bucket: S3_BUCKET,
-    Key: fileName,
-    Expires: 500,
-    ContentType: fileType,
-    ACL: "public-read",
+    Key: fileName, // File name in bucket
+    Expires: 500, // URL expiry in seconds
+    ContentType: fileType,  // type of file
+    ACL: "public-read", // File will be publicly readable
   };
 
+  // Generate pre-signed URL for client to upload file
   s3.getSignedUrlPromise("putObject", params)
     .then(function (url) {
       const data = {

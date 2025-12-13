@@ -1,11 +1,16 @@
+// Libraries
 const express = require('express');
 const Stripe = require('stripe');
 require('dotenv').config();
-const stripe = Stripe(process.env.REACT_APP_STRIPE_KEY);
+const stripe = Stripe(process.env.STRIPE_KEY);
 router = express.Router()
 const user_service = require('../services/users');
 
+/**
+ * Stripe Checkout routes.
+ */
 
+// Create Stripe session 
 router.post('/create-checkout-session', async (req, res) => {
   const user = await user_service.getUserById(req.body?.userId);
 
@@ -79,7 +84,7 @@ router.post('/create-checkout-session', async (req, res) => {
   res.send({clientSecret: session.client_secret, sessionId: session.id});
 });
 
-
+// Fetch Stripe session status 
 router.get('/session-status', async (req, res) => {
   const session = await stripe.checkout.sessions.retrieve(req.query.session_id);  
   res.send({

@@ -1,113 +1,51 @@
-const request = require("supertest")
-const app = require("../index")
+const request = require('supertest');
+const app = require('../index'); 
+const jwt = require('jsonwebtoken');
 
-require("dotenv").config();
+// Helper to create tokens
+const makeAccessToken = (claims) =>
+  jwt.sign(claims, process.env.ACCESS_TOKEN_SECRET, { expiresIn: '1h' });
 
+describe('User routes', () => {
+  let adminToken, userToken;
 
-const reqUser = {
-    user_email:"test1@gmail.com", 
-    user_password:"password"
-}
+  beforeAll(() => {
+    adminToken = makeAccessToken({ user_id: 1, user_role: 'ADMIN' });
+    userToken = makeAccessToken({ user_id: 2, user_role: 'USER' });
+  });
 
-
-let user_id;
-let token;
-let server;
-
-
-describe("POST /user", () => {
-    test("should create a user", async () => {
-        return request(app)
-            .post('/user')
-            .send(reqUser)
-            .expect(201)
-            .then(({ body })=>
-            {
-                user_id = body.user_id;
-                token = body.access_token; 
-            })
+  test('signs up a new user', async () => {
+    const res = await request(app).post('/api/v1/users').send({
+      user_email: 'new@example.com',
+      user_password: 'Passw0rd!',
+      user_first_name: 'Newbie',
     });
-});
+    expect(res.status).toBe(201);
+    expect(res.body).toHaveProperty('access_token');
+    expect(res.body).toHaveProperty('refresh_token');
+    expect(res.body).not.toHaveProperty('user_password_hash');
+  });
 
+  test('forbids USER from reading another user profile', async () => {
+    const res = await request(app)
+      .get('/api/v1/users/1')
+      .set('Authorization', `Bearer ${userToken}`);
+    expect(res.status).toBe(403);
+  });
 
-describe("GET /users", () => {
-    it("should return all users", async () => {
-        return request(app)
-            .get("/users")
-            .set('Authorization', `Bearer ${token}`)
-            .expect('Content-Type', /json/)
-            .expect(403)
-            .then((res) => {
-                expect(res.statusCode).toBe(403);
-            })
+  test('ADMIN can read any user profile', async () => {
+    const res = await request(app)
+      .get('/api/v1/users/2')
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveProperty('user_email');
+  });
+
+  test('login fails with wrong password', async () => {
+    const res = await request(app).post('/api/v1/auth/login').send({
+      user_email: 'user1@gmail.com',
+      user_password: 'badpass',
     });
+    expect(res.status).toBe(401);
+  });
 });
-
-
-describe("GET /user/:user_id", () => {
-    it("should return a user", async () => {
-        return request(app)
-            .get(`/user/${user_id}`)
-            .set('Authorization', `Bearer ${token}`)
-            .expect('Content-Type', /json/)
-            .expect(200)
-            .then((res) => {
-                expect(res.statusCode).toBe(200);
-            })
-    });
-});
-
-describe("PUT /user", () => {
-    it("should update a product", async () => {
-        return request(app)
-            .put("/user")
-            .set('Authorization', `Bearer ${token}`)
-            .send({ user_id, user_role: "ADMIN" })
-            .expect(200)
-            .then((res) => {
-                expect(res.statusCode).toBe(200);
-            })
-    });
-});
-
-
-describe("POST /login", () => {
-    test("should login a user", async () => {
-        return request(app)
-            .post('/login')
-            .send(reqUser)
-            .expect(200)
-            .then(({ body })=>
-            {
-                user_id = body.user_id;
-                token = body.access_token; 
-            })
-    });
-});
-
-describe("GET /users", () => {
-    it("should return all users", async () => {
-        return request(app)
-            .get("/users")
-            .set('Authorization', `Bearer ${token}`)
-            .expect('Content-Type', /json/)
-            .expect(200)
-            .then((res) => {
-                expect(res.statusCode).toBe(200);
-            })
-    });
-});
-
-describe("DELETE /user", () => {
-    it("should delete a user", async () => {
-        return request(app)
-            .delete("/user")
-            .set('Authorization', `Bearer ${token}`)
-            .send({ user_id })
-            .expect(200)
-            .then((res) => {
-                expect(res.statusCode).toBe(200);
-            })
-    });
-});
-

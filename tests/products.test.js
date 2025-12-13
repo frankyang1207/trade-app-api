@@ -1,113 +1,64 @@
-const request = require("supertest")
-const app = require("../index")
+const request = require('supertest');
+const app = require('../index');
+const jwt = require('jsonwebtoken');
 
-require("dotenv").config();
+const makeAccessToken = (claims) =>
+  jwt.sign(claims, process.env.ACCESS_TOKEN_SECRET, { expiresIn: '1h' });
 
+describe('Product routes', () => {
+  let adminToken, userToken, productId;
 
-const reqUser = {
-    user_email:"test@gmail.com", 
-    user_password:"password"
-}
+  beforeAll(() => {
+    adminToken = makeAccessToken({ user_id: 1, user_role: 'ADMIN' });
+    userToken = makeAccessToken({ user_id: 2, user_role: 'USER' });
+  });
 
-const reqProduct = {
-    product_name: "product_test",
-    product_description: "product_descption",
-    product_price: 10.99
-}
+  test('ADMIN can create a product', async () => {
+    const res = await request(app)
+      .post('/api/v1/product')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({
+        product_name: 'Test Hat',
+        product_price: 19.99,
+        product_description: 'Test text',
+        product_quantity: 1,
+        product_created_datetime: new Date(),
+        product_modified_datetime: new Date(),
+      });
+    expect(res.status).toBe(201);
+    productId = res.body.product_id;
+  });
 
-let user_id;
-let token;
-let product_id;
+  test('USER cannot create a product', async () => {
+    const res = await request(app)
+      .post('/api/v1/product')
+      .set('Authorization', `Bearer ${userToken}`)
+      .send({
+        product_name: 'Sneaky',
+        product_price: 9.99,
+      });
+    expect(res.status).toBe(403);
+  });
 
-describe("POST /user", () => {
-    test("should create a user", async () => {
-        return request(app)
-            .post('/user')
-            .send(reqUser)
-            .expect(201)
-            .then(({ body })=>
-            {
-                user_id = body.user_id;
-                token = body.access_token; 
-            })
-    });
-});
+  test('fetch single product', async () => {
+    const res = await request(app).get(`/api/v1/product/${productId}`);
+    expect(res.status).toBe(200);
+    const resBody = Array.isArray(res.body) ? res.body[0] : res.body;
+    expect(resBody).toHaveProperty('product_name', 'Test Hat');
+  });
 
+  test('ADMIN can update product', async () => {
+    const res = await request(app)
+      .put(`/api/v1/product/${productId}`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ product_name: 'Updated Hat' });
+    expect(res.status).toBe(200);
+  });
 
-describe("GET /products", () => {
-    it("should return all products", async () => {
-        return request(app)
-            .get("/products")
-            .expect('Content-Type', /json/)
-            .expect(200)
-            .then((res) => {
-                expect(res.statusCode).toBe(200);
-            })
-    });
-});
-
-
-
-describe("POST /product", () => {
-    it("should create a product", async () => {
-        return request(app)
-            .post("/product")
-            .set('Authorization', `Bearer ${token}`)
-            .send(reqProduct)
-            .expect(201)
-            .then(({ body }) => {
-                product_id = body.product_id;
-            })
-    });
-});
-
-describe("GET /product/:product_id", () => {
-    it("should return a product", async () => {
-        return request(app)
-            .get(`/product/${product_id}`)
-            .expect('Content-Type', /json/)
-            .expect(200)
-            .then((res) => {
-                expect(res.statusCode).toBe(200);
-            })
-    });
-});
-
-describe("PUT /product", () => {
-    it("should update a product", async () => {
-        return request(app)
-            .put("/product")
-            .set('Authorization', `Bearer ${token}`)
-            .send({ product_id, product_name: "test" })
-            .expect(200)
-            .then((res) => {
-                expect(res.statusCode).toBe(200);
-            })
-    });
-});
-
-describe("DELETE /product", () => {
-    it("should delete a product", async () => {
-        return request(app)
-            .delete("/product")
-            .set('Authorization', `Bearer ${token}`)
-            .send({ product_id })
-            .expect(200)
-            .then((res) => {
-                expect(res.statusCode).toBe(200);
-            })
-    });
-});
-
-describe("DELETE /user", () => {
-    it("should delete a user", async () => {
-        return request(app)
-            .delete("/user")
-            .set('Authorization', `Bearer ${token}`)
-            .send({ user_id })
-            .expect(200)
-            .then((res) => {
-                expect(res.statusCode).toBe(200);
-            })
-    });
+  test('ADMIN can delete any product', async () => {
+    const res = await request(app)
+      .delete(`/api/v1/product/${productId}`)
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(res.status).toBe(200);
+  });
 });

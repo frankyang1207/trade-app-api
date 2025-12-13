@@ -7,7 +7,7 @@
     const saltRounds = 10;
     dotenv.config();
 
-    // get all users, only accessible to admin
+    // Fetch all users (restricted to ADMIN)
     const getUsers = async (request, response) => {
         const user_role = request.user.user_role;
         if (user_role != 'ADMIN') {
@@ -26,7 +26,7 @@
         }
     }
 
-    // get user info
+    // Fetch a single user (restricted to account owner or ADMIN)
     const getUser = async (request, response) => {
         const { user_id, user_role } = request.user;
         const req_user_id = request.params.user_id;
@@ -46,7 +46,7 @@
         }
     }
 
-    // get user info using user id
+    // Fetch a user by using user_id (internal helper)
     const getUserById = async (user_id) => {
         try {
             let user = await knex('users')
@@ -59,7 +59,7 @@
         }
     }
 
-    // get user info using user email
+    // Fetch a user by using user_email (internal helper)
     const getUserByEmail = async (user_email) => {
         try {
             let user = await knex('users')
@@ -72,17 +72,17 @@
         }
     }
 
-    // create a new user
+    // Create a new user, then log in
     const createUser = async (request, response) => {
         const { user_email, user_password, ...rest } = request.body;
         const user = await getUserByEmail(user_email);
         if (user) {
             return response.status(409).json({ error: 'Account with this email already exists' });
         }
-        // hash password
+        // Hash password
         const user_password_hash = await bcrypt.hash(user_password, saltRounds);
         try {
-            //create user
+            // Create user (defaults to USER role)
             const [{user_id, user_role}] = await knex('users')
             .returning(['user_id', 'user_role'])
                 .insert({
@@ -97,7 +97,8 @@
             const data = { user_id, user_role  };
             const access_token = generateAccessToken(data);
             
-            const refresh_token = jwt.sign(data, process.env.REACT_APP_REFRESH_TOKEN_SECRET);
+            // Create a access token
+            const refresh_token = jwt.sign(data, process.env.REFRESH_TOKEN_SECRET);
             await knex('tokens').insert({ token_user_id: user_id, token_content: refresh_token });
 
             response.status(201).json({
@@ -112,24 +113,23 @@
         }
     }
 
-    // update a user
+    // Update user profile (restricted to account owner or ADMIN)
     const updateUser = async (request, response) => {
         const { user_password, ...rest } = request.body;
         const user_email = request.body.user_email;
         const { user_id, user_role } = request.user;
         const req_user_id = request.body.user_id;
-        // user can only be updated by admin or the same person
+        // Only the admin or account owner can update
         if ((user_id != req_user_id) && (user_role != 'ADMIN')) {
-            response.status(403).json({ error: 'User unauthorized' });
-            return;
+            return response.status(403).json({ error: 'User unauthorized' });
         }
         console.log(request.body);
-        // hash the password if it is in the req
+        // Hash the password if present
         let user_password_hash = "";
         if (user_password) {
             user_password_hash = await bcrypt.hash(user_password, saltRounds);
         }
-        // if duplicate email
+        // Enforce unique email if changing it
         if (user_email) {
             const user = await getUserByEmail(user_email);
             if (user && user.user_id != user_id) {
@@ -148,15 +148,17 @@
         }
     }
 
+    //Delete a user (restricted to account owner or ADMIN)
     const deleteUser = async (request, response) => {
         const { user_id, user_role } = request.user;
         const req_user_id = request.body.user_id;
-        // user can only be removed by admin or the same person
+        // Only the account owner or an admin can delete
         if ((user_id != req_user_id) && (user_role != 'ADMIN')) {
             response.status(403).json({ error: 'User unauthorized' });
             return;
         }
         try {
+            // Cascade deletes (tokens, then user-owned products, then user)
             await knex('tokens')
                 .where('token_user_id', req_user_id)
                 .del();
@@ -172,6 +174,7 @@
         }
     }
 
+    // Verify credentials, return access + refresh tokens.
     const login = async (request, response) => {
         const { user_email, user_password } = request.body;
         if (!user_email || !user_password) {
@@ -205,7 +208,7 @@
                 'refresh_token': token.token_content
                 });
             }
-            const refresh_token = jwt.sign(data, process.env.REACT_APP_REFRESH_TOKEN_SECRET)
+            const refresh_token = jwt.sign(data, process.env.REFRESH_TOKEN_SECRET)
             await knex('tokens')
                 .insert({'token_user_id': user.user_id, 'token_content': refresh_token });
             response.json({ 
@@ -221,6 +224,7 @@
         }
     }
 
+    // Removed the stored token
     const logout = async (request, response) => {
         const refresh_token = request.body.token;
         if (!refresh_token) {
@@ -244,6 +248,7 @@
         }
     }
 
+    // Verify the refresh token and issue a new access token.
     const token = async (request, response) => {
         const refresh_token = request.body.token;
         if (!refresh_token) {
@@ -254,7 +259,7 @@
             if (!isLoggedIn) {
                 return response.status(403).json({ error: 'Invalid session' });
             }
-            jwt.verify(refresh_token, process.env.REACT_APP_REFRESH_TOKEN_SECRET, (error, user) => {
+            jwt.verify(refresh_token, process.env.REFRESH_TOKEN_SECRET, (error, user) => {
                 if (error) {
                     return response.status(403).json({ error: 'Invalid session' });
                 }
@@ -268,12 +273,13 @@
         }
     }
 
-
+    // Generate a short-lived access token (JWT)
     const generateAccessToken = (user) => {
-        return(jwt.sign(user, process.env.REACT_APP_ACCESS_TOKEN_SECRET, { expiresIn: '7d' }));
+        return(jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, { expiresIn: '7d' }));
     }
 
 
+    // Check whether a refresh token is present in the token store (session table)
     const checkLoggedIn = async (refresh_token) => {
         const tokens = await knex('tokens')
             .select('*')

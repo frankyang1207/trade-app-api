@@ -6,19 +6,19 @@ require('dotenv').config();
 module.exports = {
 
   development: {
-  client: 'pg',
-  connection: {
-      host: 'localhost',
-      user: 'frank',
-      password: 'password',
-      database: 'trade_db',},
-      migrations: {
-        tableName: 'knex_migrations'
-      }
+  client: 'postgresql',
+    connection: process.env.DATABASE_URL,
+    pool: {
+      min: 1,
+      max: 3
+    },
+    migrations: {
+      tableName: 'knex_migrations'
+    }
   },
 
   test: {
-    client: 'pg',
+    client: 'postgresql',
     connection: {
       host: 'localhost',
       user: 'frank',
@@ -37,8 +37,8 @@ module.exports = {
       password: 'password'
     },
     pool: {
-      min: 2,
-      max: 10
+      min: 1,
+      max: 3
     },
     migrations: {
       tableName: 'knex_migrations'
@@ -47,10 +47,10 @@ module.exports = {
 
   production: {
     client: 'postgresql',
-    connection: process.env.REACT_APP_DATABASE_URL,
+    connection: process.env.DATABASE_URL,
     pool: {
-      min: 2,
-      max: 10
+      min: 1,
+      max: 3
     },
     migrations: {
       tableName: 'knex_migrations'
