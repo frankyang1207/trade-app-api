@@ -99,7 +99,7 @@ const updateProduct = async (request, response) => {
     }
     try {
         const [{product_owner}] = await getProductById(productIdParam);
-        if (!product) {
+        if (!product_id) {
             return response.status(404).json({ error: 'Product not found' });
         }
 
