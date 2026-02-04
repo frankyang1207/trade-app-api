@@ -15,20 +15,23 @@ router.post('/create-checkout-session', async (req, res) => {
   const user = await user_service.getUserById(req.body?.userId);
 
   const line_items = req.body.cartItems?.map((item) => {
+    const product_data = {
+      name: item.product_name,
+      images: item.product_image_link ? [item.product_image_link] : [],
+      metadata: { id: String(item.product_id) },
+    };
+
+     // Only include description if it's non-empty
+    const desc = (item.product_description ?? "").trim();
+    if (desc) product_data.description = desc;
+
     return {
       price_data: {
         currency: 'cad',
-        product_data: {
-          name: item.product_name,
-          images: [item.product_image_link],
-          description: item.product_description,
-          metadata:{
-            id: item.product_id
-          }
-        },
+        product_data,
         unit_amount: Math.round(item.product_price * 100),
       },
-      quantity: item.cartQuantity,
+      quantity: Number(item.cartQuantity) || 1,
     }
   })
   const session = await stripe.checkout.sessions.create({
