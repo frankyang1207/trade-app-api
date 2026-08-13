@@ -1,137 +1,136 @@
-// Libraries
-const express = require('express');
-const Stripe = require('stripe');
-require('dotenv').config();
-const stripe = Stripe(process.env.STRIPE_KEY);
-router = express.Router()
-const user_service = require('../services/users');
+  // Libraries
+  const express = require('express');
+  const Stripe = require('stripe');
+  require('dotenv').config();
+  const stripe = Stripe(process.env.STRIPE_KEY);
+  router = express.Router()
+  const user_service = require('../services/users');
 
-/**
- * Stripe Checkout routes.
- */
+  /**
+   * Stripe Checkout routes.
+   */
 
-// Create Stripe session 
-router.post('/create-checkout-session', async (req, res) => {
-  const user = await user_service.getUserById(req.body?.userId);
+  // Create Stripe session 
+  router.post('/create-checkout-session', async (req, res) => {
+    const user = await user_service.getUserById(req.body?.userId);
 
-  const line_items = req.body.cartItems?.map((item) => {
-    const product_data = {
-      name: item.product_name,
-      images: item.product_image_link ? [item.product_image_link] : [],
-      metadata: { id: String(item.product_id) },
-    };
+    const line_items = req.body.cartItems?.map((item) => {
+      const product_data = {
+        name: item.product_name,
+        images: item.product_image_link ? [item.product_image_link] : [],
+        metadata: { id: String(item.product_id) },
+      };
 
-     // Only include description if it's non-empty
-    const desc = (item.product_description ?? "").trim();
-    if (desc) product_data.description = desc;
+      // Only include description if it's non-empty
+      const desc = (item.product_description ?? "").trim();
+      if (desc) product_data.description = desc;
 
-    return {
-      price_data: {
-        currency: 'cad',
-        product_data,
-        unit_amount: Math.round(item.product_price * 100),
-      },
-      quantity: Number(item.cartQuantity) || 1,
-    }
-  })
-  const session = await stripe.checkout.sessions.create({
-    customer_email: user.user_email,
-    ui_mode: 'embedded',
-    redirect_on_completion: 'never',
-    payment_method_types: ['card'],
-    shipping_options: [
-      {
-        shipping_rate_data: {
-          type: 'fixed_amount',
-          fixed_amount: {
-            amount: 0,
-            currency: 'cad',
-          },
-          display_name: 'Free shipping',
-          delivery_estimate: {
-            minimum: {
-              unit: 'business_day',
-              value: 5,
-            },  
-            maximum: {
-              unit: 'business_day',
-              value: 7,
+      return {
+        price_data: {
+          currency: 'cad',
+          product_data,
+          unit_amount: Math.round(item.product_price * 100),
+        },
+        quantity: Number(item.cartQuantity) || 1,
+      }
+    })
+    const session = await stripe.checkout.sessions.create({
+      customer_email: user.user_email,
+      ui_mode: 'embedded',
+      redirect_on_completion: 'never',
+      payment_method_types: ['card'],
+      shipping_options: [
+        {
+          shipping_rate_data: {
+            type: 'fixed_amount',
+            fixed_amount: {
+              amount: 0,
+              currency: 'cad',
+            },
+            display_name: 'Free shipping',
+            delivery_estimate: {
+              minimum: {
+                unit: 'business_day',
+                value: 5,
+              },  
+              maximum: {
+                unit: 'business_day',
+                value: 7,
+              },
             },
           },
         },
-      },
-      {
-        shipping_rate_data: {
-          type: 'fixed_amount',
-          fixed_amount: {
-            amount: 1500,
-            currency: 'cad',
-          },
-          display_name: 'Next day air',
-          delivery_estimate: {
-            minimum: {
-              unit: 'business_day',
-              value: 1,
+        {
+          shipping_rate_data: {
+            type: 'fixed_amount',
+            fixed_amount: {
+              amount: 1500,
+              currency: 'cad',
             },
-            maximum: {
-              unit: 'business_day',
-              value: 1,
+            display_name: 'Next day air',
+            delivery_estimate: {
+              minimum: {
+                unit: 'business_day',
+                value: 1,
+              },
+              maximum: {
+                unit: 'business_day',
+                value: 1,
+              },
             },
           },
         },
-      },
-    ],
-    line_items,
-    mode: 'payment',
+      ],
+      line_items,
+      mode: 'payment',
+    });
+    res.send({clientSecret: session.client_secret, sessionId: session.id});
   });
-  res.send({clientSecret: session.client_secret, sessionId: session.id});
-});
 
-// Fetch Stripe session status 
-router.get('/session-status', async (req, res) => {
-  const session = await stripe.checkout.sessions.retrieve(req.query.session_id);  
-  res.send({
-    status: session.status,
-    customer_email: session.customer_email,
+  // Fetch Stripe session status 
+  router.get('/session-status', async (req, res) => {
+    const session = await stripe.checkout.sessions.retrieve(req.query.session_id);  
+    res.send({
+      status: session.status,
+      customer_email: session.customer_email,
+    });
   });
-});
 
-// Stripe workbook
-// This is your Stripe CLI webhook secret for testing your endpoint locally.
-let endpointSecret;
-endpointSecret = "whsec_e9948b300105df80ef4018dd5faa8d211c7f2ab78b0c54c53d2ee1e9c0e8c435";
+  // Stripe workbook
+  // This is your Stripe CLI webhook secret for testing your endpoint locally.
+  const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
-router.post('/webhook', express.raw({type: 'application/json'}), (request, response) => {
-  const sig = request.headers['stripe-signature'];
-  let data;
-  let eventType;
-  let event;
-  
-  if (endpointSecret) {
-    try {
-      event = stripe.webhooks.constructEvent(request.body, sig, endpointSecret);
-      console.log('webhook verified');
-    } catch (err) {
-      console.log(`webhook Error ${err.message}`);
-      response.status(400).send(`Webhook Error: ${err.message}`);
-      return;
-    }
+  router.post('/webhook', express.raw({type: 'application/json'}), (request, response) => {
+    const sig = request.headers['stripe-signature'];
+    let data;
+    let eventType;
+    let event;
     
-    data = event.data.object;
-    eventType = event.type;
-  } else {
-    data = req.body.data.object;
-    eventType = req.body.type
-  }
+    if (endpointSecret) {
+      try {
+        event = stripe.webhooks.constructEvent(request.body, sig, endpointSecret);
+        console.log('webhook verified');
+      } catch (err) {
+        console.log(`webhook Error ${err.message}`);
+        response.status(400).send(`Webhook Error: ${err.message}`);
+        return;
+      }
+      
+      data = event.data.object;
+      eventType = event.type;
+    } else {
+      data = req.body.data.object;
+      eventType = req.body.type
+    }
 
-  // Handle the event
-  if (eventType === 'checkout.session.completed') {
-    stripe.customers.retrieve(data.customer).then((customer) => {
-    }).catch((err) => console.log(err.message))
-  }
+    // Handle the event
+    if (eventType === 'checkout.session.completed') {
+      stripe.customers.retrieve(data.customer).then((customer) => {
+      }).catch((err) => console.log(err.message))
+    }
 
-  // Return a 200 response to acknowledge receipt of the event
-  response.send().end();
-});
+    // Return a 200 response to acknowledge receipt of the event
+    response.send().end();
+  });
 
-module.exports = router;
+  module.exports = router;

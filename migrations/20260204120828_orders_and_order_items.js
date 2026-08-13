@@ -10,14 +10,19 @@ exports.up = async function (knex) {
       .inTable("users")
       .onDelete("CASCADE");
 
-    table.string("stripe_session_id").unique();
+    table.string("stripe_session_id").notNullable().unique();
+
     table.string("order_status").notNullable().defaultTo("paid");
 
-    // store money in cents
+    // Stripe-compatible money representation: cents
     table.integer("order_total_amount").notNullable();
+
     table.string("order_currency", 3).notNullable().defaultTo("cad");
 
-    table.dateTime("order_created_datetime").defaultTo(knex.fn.now());
+    table
+      .dateTime("order_created_datetime")
+      .notNullable()
+      .defaultTo(knex.fn.now());
 
     table.index(["user_id"]);
     table.index(["order_created_datetime"]);
@@ -34,19 +39,24 @@ exports.up = async function (knex) {
       .inTable("orders")
       .onDelete("CASCADE");
 
-    // Reference back to products (traceability only)
+    // Original product reference for traceability.
+    // Historical order survives if product is deleted.
     table
       .integer("product_id")
-      .notNullable()
+      .nullable()
       .references("product_id")
-      .inTable("products");
+      .inTable("products")
+      .onDelete("SET NULL");
 
-    // SNAPSHOT fields (do NOT FK these)
+    // Snapshot fields at purchase time
     table.string("product_name").notNullable();
-    table.decimal("product_price", 10, 2).notNullable(); // price at purchase
+
+    // Store all money in cents
+    table.integer("product_unit_amount").notNullable();
+
     table.integer("product_quantity").notNullable();
 
-    table.decimal("line_total", 10, 2).notNullable();
+    table.integer("line_total_amount").notNullable();
 
     table.index(["order_id"]);
     table.index(["product_id"]);
