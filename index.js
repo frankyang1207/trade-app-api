@@ -2,9 +2,10 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const dotenv = require('dotenv');
 const user_router = require('./routes/users');
-const product_router = require('./routes/products')
-const s3_router = require('./routes/s3Uploader')
-const stripe = require('./routes/stripe')
+const product_router = require('./routes/products');
+const s3_router = require('./routes/s3Uploader');
+const order_router = require('./routes/orders');
+const stripe = require('./routes/stripe');
 const app = express();
 const cors = require('cors');
 
@@ -27,7 +28,8 @@ app.get('/', (req, res) => {
 app.use(user_router);
 app.use(product_router);
 app.use(s3_router);
-app.use(stripe)
+app.use(order_router);
+app.use(stripe);
 
 
 module.exports = app;

@@ -1,59 +1,26 @@
-exports.up = async function (knex) {
-  // ORDERS TABLE
-  await knex.schema.createTable("orders", function (table) {
-    table.increments("order_id").primary();
-
-    table
-      .integer("user_id")
-      .notNullable()
-      .references("user_id")
-      .inTable("users")
-      .onDelete("CASCADE");
-
-    table.string("stripe_session_id").unique();
-    table.string("order_status").notNullable().defaultTo("paid");
-
-    // store money in cents
-    table.integer("order_total_amount").notNullable();
-    table.string("order_currency", 3).notNullable().defaultTo("cad");
-
-    table.dateTime("order_created_datetime").defaultTo(knex.fn.now());
-
-    table.index(["user_id"]);
-    table.index(["order_created_datetime"]);
-  });
-
-  // ORDER ITEMS TABLE
-  await knex.schema.createTable("order_items", function (table) {
-    table.increments("order_item_id").primary();
-
-    table
-      .integer("order_id")
-      .notNullable()
-      .references("order_id")
-      .inTable("orders")
-      .onDelete("CASCADE");
-
-    // Reference back to products (traceability only)
-    table
-      .integer("product_id")
-      .notNullable()
-      .references("product_id")
-      .inTable("products");
-
-    // SNAPSHOT fields (do NOT FK these)
-    table.string("product_name").notNullable();
-    table.decimal("product_price", 10, 2).notNullable(); // price at purchase
-    table.integer("product_quantity").notNullable();
-
-    table.decimal("line_total", 10, 2).notNullable();
-
-    table.index(["order_id"]);
-    table.index(["product_id"]);
-  });
+exports.up = function(knex) {
+    return knex.schema
+    .createTable('users', function (table) {
+        table.increments('user_id').primary();
+        table.string('user_image_link');
+        table.string('user_email').notNullable().unique();
+        table.string('user_password_hash').notNullable();
+        table.string('user_first_name');
+        table.string('user_last_name');
+        table.string('user_phone');
+        table.string('user_postal_code').notNullable();
+        table.string('user_country');
+        table.string('user_province');
+        table.string('user_city');
+        table.string('user_street_address');
+        table.string('user_role');
+        table.dateTime('user_created_datetime').notNullable();
+        table.dateTime('user_modified_datetime').notNullable();
+    })
 };
 
-exports.down = async function (knex) {
-  await knex.schema.dropTableIfExists("order_items");
-  await knex.schema.dropTableIfExists("orders");
+
+exports.down = function(knex) {
+    return knex.schema
+    .dropTableIfExists('users');
 };

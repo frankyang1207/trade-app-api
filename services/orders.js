@@ -7,96 +7,130 @@ const stripe = Stripe(process.env.STRIPE_KEY);
 // Confirm order after Stripe payment success
 // Frontend should call this after it gets session_id and sees payment completed
 const confirmOrder = async (request, response) => {
-  const { sessionId } = request.body;
+  const { sessionId, cartItems = [] } = request.body;
   const { user_id } = request.user;
 
   if (!sessionId) {
-    return response.status(400).json({ error: 'sessionId is required' });
+    return response.status(400).json({
+      error: "sessionId is required",
+    });
+  }
+
+  if (!cartItems.length) {
+    return response.status(400).json({
+      error: "cartItems are required",
+    });
   }
 
   try {
-    // Prevent duplicates: if session already saved, return existing order
-    const existing = await knex('orders')
-      .select('order_id')
-      .where({ stripe_session_id: sessionId })
+    // 1. Prevent duplicate order creation
+    const existing = await knex("orders")
+      .select("order_id")
+      .where({
+        stripe_session_id: sessionId,
+        user_id,
+      })
       .first();
 
     if (existing) {
-      return response.status(200).json({ success: true, order_id: existing.order_id, message: 'Order already confirmed' });
+      return response.status(200).json({
+        success: true,
+        order_id: existing.order_id,
+        message: "Order already confirmed",
+      });
     }
 
-    // Retrieve session + line items from Stripe
+    // 2. Retrieve the Checkout Session from Stripe
     const session = await stripe.checkout.sessions.retrieve(sessionId, {
-      expand: ['line_items'],
+      expand: ["line_items"],
     });
 
-    // Basic safety checks
     if (!session) {
-      return response.status(404).json({ error: 'Stripe session not found' });
-    }
-
-    // Embedded checkout might show different fields; payment_status is the reliable one
-    if (session.payment_status !== 'paid') {
-      return response.status(400).json({ error: 'Payment not completed' });
-    }
-
-    // Insert into orders (NOTE: store totals in cents to avoid float issues)
-    const [{ order_id }] = await knex('orders')
-      .returning('order_id')
-      .insert({
-        user_id,
-        stripe_session_id: session.id,
-        order_status: 'paid',
-        order_total_amount: session.amount_total ?? 0, // cents
-        order_currency: session.currency ?? 'cad',
-        order_created_datetime: knex.fn.now(),
+      return response.status(404).json({
+        error: "Stripe session not found",
       });
+    }
 
-    // Build order_items from Stripe line items
-    // Stripe line_item fields are reliable: description, quantity, amount_total
-    // unit_amount is on price (might be null depending on how Stripe returns it)
+    // 3. Verify payment
+    if (session.payment_status !== "paid") {
+      return response.status(400).json({
+        error: "Payment not completed",
+      });
+    }
+
     const stripeItems = session.line_items?.data || [];
 
     if (stripeItems.length === 0) {
-      // Still keep the order, but warn
-      return response.status(201).json({
-        success: true,
-        order_id,
-        warning: 'Order created but no line items found on Stripe session. Check expand: ["line_items"].',
+      return response.status(400).json({
+        error: "No line items found in Stripe session",
       });
     }
 
-    const orderItems = stripeItems.map((li, index) => {
-      if (!productIdByIndex[index]) {
-        throw new Error("product_id missing for line item");
-      }
-      const quantity = Number(li.quantity) || 1;
+    // Make sure frontend cart matches the number of Stripe line items
+    if (cartItems.length !== stripeItems.length) {
+      return response.status(400).json({
+        error: "Cart items do not match Stripe line items",
+      });
+    }
 
-      // Unit price in cents
-      const unitAmountCents =
-        (li.price && Number(li.price.unit_amount)) ||
-        Math.round((Number(li.amount_total || 0) / quantity));
+    // 4. Everything DB-related happens in one transaction
+    const order_id = await knex.transaction(async (trx) => {
+      // Create parent order FIRST
+      const [order] = await trx("orders")
+        .insert({
+          user_id,
+          stripe_session_id: session.id,
+          order_status: "paid",
+          order_total_amount: session.amount_total ?? 0,
+          order_currency: session.currency ?? "cad",
+          order_created_datetime: knex.fn.now(),
+        })
+        .returning("order_id");
 
-      const lineTotalCents = Number(li.amount_total || unitAmountCents * quantity);
+      const newOrderId = order.order_id;
 
-      return {
-        order_id,
-        product_id: productIdByIndex[index],
+      // 5. Build order items after we have the order_id
+      const orderItems = stripeItems.map((li, index) => {
+        const productId = cartItems[index]?.product_id;
 
-        product_name: li.description || 'Item',
-        // store decimals in DB (matches your products.product_price type)
-        product_price: (unitAmountCents / 100).toFixed(2),
-        product_quantity: quantity,
-        line_total: (lineTotalCents / 100).toFixed(2),
-      };
+        if (!productId) {
+          throw new Error("product_id missing for line item");
+        }
+
+        const quantity = Number(li.quantity) || 1;
+
+        const unitAmountCents =
+          li.price?.unit_amount != null
+            ? Number(li.price.unit_amount)
+            : Math.round(
+                Number(li.amount_total || 0) / quantity
+              );
+
+        return {
+          order_id: newOrderId,
+          product_id: productId,
+          product_name: li.description || "Item",
+          product_unit_amount: unitAmountCents,
+          product_quantity: quantity,
+        };
+      });
+
+      // 6. Insert all items
+      await trx("order_items").insert(orderItems);
+
+      return newOrderId;
     });
 
-    await knex('order_items').insert(orderItems);
-
-    return response.status(201).json({ success: true, order_id });
+    return response.status(201).json({
+      success: true,
+      order_id,
+    });
   } catch (error) {
-    console.log(error);
-    return response.status(500).json({ error: error.message });
+    console.error("Order confirmation error:", error);
+
+    return response.status(500).json({
+      error: error.message,
+    });
   }
 };
 

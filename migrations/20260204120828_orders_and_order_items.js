@@ -17,7 +17,7 @@ exports.up = async function (knex) {
     // Stripe-compatible money representation: cents
     table.integer("order_total_amount").notNullable();
 
-    table.string("order_currency", 3).notNullable().defaultTo("cad");
+    table.string("order_currency", 3).notNullable().defaultTo("CAD");
 
     table
       .dateTime("order_created_datetime")
@@ -55,8 +55,6 @@ exports.up = async function (knex) {
     table.integer("product_unit_amount").notNullable();
 
     table.integer("product_quantity").notNullable();
-
-    table.integer("line_total_amount").notNullable();
 
     table.index(["order_id"]);
     table.index(["product_id"]);
