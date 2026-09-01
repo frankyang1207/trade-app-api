@@ -18,15 +18,11 @@ module.exports = {
   },
 
   test: {
-    client: 'postgresql',
-    connection: {
-      host: 'localhost',
-      user: 'frank',
-      password: 'password',
-      database: 'trade_db',},
-      migrations: {
-        tableName: 'knex_migrations'
-      }
+    client: "postgresql",
+    connection: process.env.TEST_DATABASE_URL,
+    migrations: {
+      tableName: "knex_migrations",
+    },
   },
 
   staging: {

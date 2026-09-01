@@ -15,7 +15,7 @@ describe('User routes', () => {
   });
 
   test('signs up a new user', async () => {
-    const res = await request(app).post('/api/v1/users').send({
+    const res = await request(app).post('/api/v1/user').send({
       user_email: 'new@example.com',
       user_password: 'Passw0rd!',
       user_first_name: 'Newbie',
@@ -28,14 +28,14 @@ describe('User routes', () => {
 
   test('forbids USER from reading another user profile', async () => {
     const res = await request(app)
-      .get('/api/v1/users/1')
+      .get('/api/v1/user/1')
       .set('Authorization', `Bearer ${userToken}`);
     expect(res.status).toBe(403);
   });
 
   test('ADMIN can read any user profile', async () => {
     const res = await request(app)
-      .get('/api/v1/users/2')
+      .get('/api/v1/user/2')
       .set('Authorization', `Bearer ${adminToken}`);
     expect(res.status).toBe(200);
     expect(res.body).toHaveProperty('user_email');
