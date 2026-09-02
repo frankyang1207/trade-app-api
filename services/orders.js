@@ -7,18 +7,12 @@ const stripe = Stripe(process.env.STRIPE_KEY);
 // Confirm order after Stripe payment success
 // Frontend should call this after it gets session_id and sees payment completed
 const confirmOrder = async (request, response) => {
-  const { sessionId, cartItems = [] } = request.body;
+  const { sessionId } = request.body;
   const { user_id } = request.user;
 
   if (!sessionId) {
     return response.status(400).json({
       error: "sessionId is required",
-    });
-  }
-
-  if (!cartItems.length) {
-    return response.status(400).json({
-      error: "cartItems are required",
     });
   }
 
@@ -42,7 +36,7 @@ const confirmOrder = async (request, response) => {
 
     // 2. Retrieve the Checkout Session from Stripe
     const session = await stripe.checkout.sessions.retrieve(sessionId, {
-      expand: ["line_items"],
+      expand: ["line_items.data.price.product"],
     });
 
     if (!session) {
@@ -58,18 +52,17 @@ const confirmOrder = async (request, response) => {
       });
     }
 
+    if (String(session.metadata?.user_id) !== String(user_id)) {
+      return response.status(403).json({
+        error: "Checkout session does not belong to this user",
+      });
+    }
+
     const stripeItems = session.line_items?.data || [];
 
     if (stripeItems.length === 0) {
       return response.status(400).json({
         error: "No line items found in Stripe session",
-      });
-    }
-
-    // Make sure frontend cart matches the number of Stripe line items
-    if (cartItems.length !== stripeItems.length) {
-      return response.status(400).json({
-        error: "Cart items do not match Stripe line items",
       });
     }
 
@@ -90,14 +83,17 @@ const confirmOrder = async (request, response) => {
       const newOrderId = order.order_id;
 
       // 5. Build order items after we have the order_id
-      const orderItems = stripeItems.map((li, index) => {
-        const productId = cartItems[index]?.product_id;
+      const orderItems = stripeItems.map((li) => {
+        const productId = Number(li.price?.product?.metadata?.id);
 
-        if (!productId) {
-          throw new Error("product_id missing for line item");
+        if (!Number.isInteger(productId) || productId < 1) {
+          throw new Error("Stripe line item is missing valid product metadata");
         }
 
-        const quantity = Number(li.quantity) || 1;
+        const quantity = Number(li.quantity);
+        if (!Number.isInteger(quantity) || quantity < 1) {
+          throw new Error("Stripe line item has an invalid quantity");
+        }
 
         const unitAmountCents =
           li.price?.unit_amount != null
