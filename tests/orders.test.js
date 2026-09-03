@@ -12,11 +12,13 @@ const knex = require("knex")(knexConfig);
 // --------------------
 
 const mockStripeRetrieve = jest.fn();
+const mockStripeCreate = jest.fn();
 
 jest.mock("stripe", () => {
   return jest.fn(() => ({
     checkout: {
       sessions: {
+        create: (...args) => mockStripeCreate(...args),
         retrieve: (...args) => mockStripeRetrieve(...args),
       },
     },
@@ -117,10 +119,88 @@ describe("Order routes", () => {
       .post("/api/v1/orders/confirm")
       .send({
         sessionId: "cs_test_123",
-        cartItems: [{ product_id: productId }],
       });
 
     expect(res.status).toBe(401);
+  });
+
+  test("rejects checkout creation without authentication", async () => {
+    const res = await request(app)
+      .post("/create-checkout-session")
+      .send({
+        cartItems: [{ product_id: productId, cartQuantity: 1 }],
+      });
+
+    expect(res.status).toBe(401);
+    expect(mockStripeCreate).not.toHaveBeenCalled();
+  });
+
+  test("uses the database price instead of a client-supplied price", async () => {
+    mockStripeCreate.mockResolvedValue({
+      id: "cs_test_server_price",
+      client_secret: "secret_test_server_price",
+    });
+
+    const res = await request(app)
+      .post("/create-checkout-session")
+      .set("Authorization", `Bearer ${userToken}`)
+      .send({
+        cartItems: [{
+          product_id: productId,
+          cartQuantity: 2,
+          product_price: 0.01,
+          product_name: "Tampered name",
+        }],
+      });
+
+    expect(res.status).toBe(200);
+    expect(mockStripeCreate).toHaveBeenCalledTimes(1);
+
+    const checkout = mockStripeCreate.mock.calls[0][0];
+    expect(checkout.metadata.user_id).toBe(String(userId));
+    expect(checkout.line_items).toHaveLength(1);
+    expect(checkout.line_items[0].price_data.unit_amount).toBe(2500);
+    expect(checkout.line_items[0].price_data.product_data.name).toBe("Test Product");
+    expect(checkout.line_items[0].quantity).toBe(2);
+  });
+
+  test("rejects an invalid checkout quantity", async () => {
+    const res = await request(app)
+      .post("/create-checkout-session")
+      .set("Authorization", `Bearer ${userToken}`)
+      .send({
+        cartItems: [{ product_id: productId, cartQuantity: 0 }],
+      });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe("Cart contains an invalid product or quantity");
+    expect(mockStripeCreate).not.toHaveBeenCalled();
+  });
+
+  test("rejects a checkout quantity greater than available stock", async () => {
+    const res = await request(app)
+      .post("/create-checkout-session")
+      .set("Authorization", `Bearer ${userToken}`)
+      .send({
+        cartItems: [{ product_id: productId, cartQuantity: 101 }],
+      });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe("Insufficient stock for Test Product");
+    expect(mockStripeCreate).not.toHaveBeenCalled();
+  });
+
+  test("rejects checkout when a product does not exist", async () => {
+    const res = await request(app)
+      .post("/create-checkout-session")
+      .set("Authorization", `Bearer ${userToken}`)
+      .send({
+        cartItems: [{ product_id: 2147483647, cartQuantity: 1 }],
+      });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe("Cart contains an unavailable product");
+    expect(mockStripeCreate).not.toHaveBeenCalled();
   });
 
   // ============================================================
@@ -131,9 +211,7 @@ describe("Order routes", () => {
     const res = await request(app)
       .post("/api/v1/orders/confirm")
       .set("Authorization", `Bearer ${userToken}`)
-      .send({
-        cartItems: [{ product_id: productId }],
-      });
+      .send({});
 
     expect(res.status).toBe(400);
     expect(res.body.error).toBe("sessionId is required");
@@ -143,17 +221,22 @@ describe("Order routes", () => {
   // TEST 3
   // ============================================================
 
-  test("rejects missing cartItems", async () => {
+  test("rejects a Stripe session owned by another user", async () => {
+    mockStripeRetrieve.mockResolvedValue({
+      id: "cs_test_wrong_user",
+      payment_status: "paid",
+      metadata: { user_id: String(userId + 1) },
+    });
+
     const res = await request(app)
       .post("/api/v1/orders/confirm")
       .set("Authorization", `Bearer ${userToken}`)
       .send({
-        sessionId: "cs_test_123",
-        cartItems: [],
+        sessionId: "cs_test_wrong_user",
       });
 
-    expect(res.status).toBe(400);
-    expect(res.body.error).toBe("cartItems are required");
+    expect(res.status).toBe(403);
+    expect(res.body.error).toBe("Checkout session does not belong to this user");
   });
 
   // ============================================================
@@ -164,6 +247,7 @@ describe("Order routes", () => {
     mockStripeRetrieve.mockResolvedValue({
       id: "cs_test_unpaid",
       payment_status: "unpaid",
+      metadata: { user_id: String(userId) },
     });
 
     const res = await request(app)
@@ -171,7 +255,6 @@ describe("Order routes", () => {
       .set("Authorization", `Bearer ${userToken}`)
       .send({
         sessionId: "cs_test_unpaid",
-        cartItems: [{ product_id: productId }],
       });
 
     expect(res.status).toBe(400);
@@ -182,10 +265,11 @@ describe("Order routes", () => {
   // TEST 5
   // ============================================================
 
-  test("rejects when cart items do not match Stripe line items", async () => {
+  test("rejects Stripe line items without product metadata", async () => {
     mockStripeRetrieve.mockResolvedValue({
-      id: "cs_test_mismatch",
+      id: "cs_test_missing_product_metadata",
       payment_status: "paid",
+      metadata: { user_id: String(userId) },
       amount_total: 2500,
       currency: "cad",
 
@@ -197,6 +281,7 @@ describe("Order routes", () => {
             amount_total: 2500,
             price: {
               unit_amount: 2500,
+              product: { metadata: {} },
             },
           },
         ],
@@ -207,20 +292,11 @@ describe("Order routes", () => {
       .post("/api/v1/orders/confirm")
       .set("Authorization", `Bearer ${userToken}`)
       .send({
-        sessionId: "cs_test_mismatch",
-
-        // Two cart items, but Stripe has only one
-        cartItems: [
-          { product_id: productId },
-          { product_id: productId },
-        ],
+        sessionId: "cs_test_missing_product_metadata",
       });
 
-    expect(res.status).toBe(400);
-
-    expect(res.body.error).toBe(
-      "Cart items do not match Stripe line items"
-    );
+    expect(res.status).toBe(500);
+    expect(res.body.error).toBe("Stripe line item is missing valid product metadata");
   });
 
   // ============================================================
@@ -234,6 +310,7 @@ describe("Order routes", () => {
     mockStripeRetrieve.mockResolvedValue({
       id: sessionId,
       payment_status: "paid",
+      metadata: { user_id: String(userId) },
       amount_total: 5000,
       currency: "cad",
 
@@ -246,6 +323,7 @@ describe("Order routes", () => {
 
             price: {
               unit_amount: 2500,
+              product: { metadata: { id: String(productId) } },
             },
           },
         ],
@@ -257,13 +335,6 @@ describe("Order routes", () => {
       .set("Authorization", `Bearer ${userToken}`)
       .send({
         sessionId,
-
-        cartItems: [
-          {
-            product_id: productId,
-            cartQuantity: 2,
-          },
-        ],
       });
 
     // API succeeded
@@ -325,6 +396,7 @@ describe("Order routes", () => {
     mockStripeRetrieve.mockResolvedValue({
       id: sessionId,
       payment_status: "paid",
+      metadata: { user_id: String(userId) },
       amount_total: 2500,
       currency: "cad",
 
@@ -337,6 +409,7 @@ describe("Order routes", () => {
 
             price: {
               unit_amount: 2500,
+              product: { metadata: { id: String(productId) } },
             },
           },
         ],
@@ -349,7 +422,6 @@ describe("Order routes", () => {
       .set("Authorization", `Bearer ${userToken}`)
       .send({
         sessionId,
-        cartItems: [{ product_id: productId }],
       });
 
     expect(firstRes.status).toBe(201);
@@ -360,7 +432,6 @@ describe("Order routes", () => {
       .set("Authorization", `Bearer ${userToken}`)
       .send({
         sessionId,
-        cartItems: [{ product_id: productId }],
       });
 
     expect(secondRes.status).toBe(200);
@@ -391,10 +462,12 @@ describe("Order routes", () => {
 
   test("rolls back the order if order item creation fails", async () => {
     const sessionId = "cs_test_rollback";
+    const invalidProductId = 2147483647;
 
     mockStripeRetrieve.mockResolvedValue({
       id: sessionId,
       payment_status: "paid",
+      metadata: { user_id: String(userId) },
       amount_total: 2500,
       currency: "cad",
 
@@ -407,27 +480,18 @@ describe("Order routes", () => {
 
             price: {
               unit_amount: 2500,
+              product: { metadata: { id: String(invalidProductId) } },
             },
           },
         ],
       },
     });
 
-    // Use a product ID that doesn't exist.
-    // order_items insert should violate the FK constraint.
-    const invalidProductId = 2147483647;
-
     const res = await request(app)
       .post("/api/v1/orders/confirm")
       .set("Authorization", `Bearer ${userToken}`)
       .send({
         sessionId,
-
-        cartItems: [
-          {
-            product_id: invalidProductId,
-          },
-        ],
       });
 
     expect(res.status).toBe(500);
