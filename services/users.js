@@ -7,6 +7,21 @@
     const saltRounds = 10;
     dotenv.config();
 
+    const USER_PROFILE_FIELDS = [
+        'user_image_link', 'user_email', 'user_first_name', 'user_last_name',
+        'user_phone', 'user_postal_code', 'user_country', 'user_province',
+        'user_city', 'user_street_address',
+    ];
+
+    const pickFields = (body, fields) => Object.fromEntries(
+        fields.filter((field) => body[field] !== undefined).map((field) => [field, body[field]])
+    );
+
+    const sendServerError = (response, error) => {
+        console.error('User service error:', error);
+        return response.status(500).json({ error: 'Unable to process user request' });
+    };
+
     // Fetch all users (restricted to ADMIN)
     const getUsers = async (request, response) => {
         const user_role = request.user.user_role;
@@ -15,14 +30,11 @@
             return;
         }
         try {
-            const users =  await knex('users')
-                .select('*');
-            data = users.map(user => {
-                delete user.user_password_hash;
-            })
-            response.status(200).json(users);
+            const users = await knex('users').select('*');
+            const safeUsers = users.map(({ user_password_hash, ...user }) => user);
+            return response.status(200).json(safeUsers);
         } catch (error) {
-            throw error;
+            return sendServerError(response, error);
         }
     }
 
@@ -42,7 +54,7 @@
             delete user.user_password_hash;
             response.status(200).json(user);
         } catch (error) {
-            throw error;
+            return sendServerError(response, error);
         }
     }
 
@@ -74,24 +86,26 @@
 
     // Create a new user, then log in
     const createUser = async (request, response) => {
-        const { user_email, user_password, ...rest } = request.body;
-        const user = await getUserByEmail(user_email);
-        if (user) {
-            return response.status(409).json({ error: 'Account with this email already exists' });
+        const { user_email, user_password } = request.body || {};
+        if (!user_email || !user_password || !request.body.user_postal_code) {
+            return response.status(400).json({ error: 'Email, password, and postal code are required' });
         }
-        // Hash password
-        const user_password_hash = await bcrypt.hash(user_password, saltRounds);
         try {
+            const user = await getUserByEmail(user_email);
+            if (user) {
+                return response.status(409).json({ error: 'Account with this email already exists' });
+            }
+            const user_password_hash = await bcrypt.hash(user_password, saltRounds);
+            const profile = pickFields(request.body, USER_PROFILE_FIELDS);
             // Create user (defaults to USER role)
             const [{user_id, user_role}] = await knex('users')
             .returning(['user_id', 'user_role'])
                 .insert({
                     user_role: 'USER', 
-                    user_email, 
                     user_password_hash, 
                     user_created_datetime: new Date(),
                     user_modified_datetime: new Date(),
-                    ...rest 
+                    ...profile
                 });
             // User login
             const data = { user_id, user_role  };
@@ -109,68 +123,65 @@
                 refresh_token
             });
         } catch (error) {
-            throw error;
+            return sendServerError(response, error);
         }
     }
 
     // Update user profile (restricted to account owner or ADMIN)
     const updateUser = async (request, response) => {
-        const { user_password, ...rest } = request.body;
-        const user_email = request.body.user_email;
+        const { user_password, user_email } = request.body || {};
         const { user_id, user_role } = request.user;
-        const req_user_id = request.body.user_id;
+        const req_user_id = request.params.user_id;
         // Only the admin or account owner can update
         if ((user_id != req_user_id) && (user_role != 'ADMIN')) {
             return response.status(403).json({ error: 'User unauthorized' });
         }
-        console.log(request.body);
-        // Hash the password if present
-        let user_password_hash = "";
-        if (user_password) {
-            user_password_hash = await bcrypt.hash(user_password, saltRounds);
-        }
-        // Enforce unique email if changing it
-        if (user_email) {
-            const user = await getUserByEmail(user_email);
-            if (user && user.user_id != user_id) {
-                return response.status(409).json({ error: 'Account with this email already exists' });
-            }
-        }
         try {
+            const existingUser = await getUserById(req_user_id);
+            if (!existingUser) return response.status(404).json({ error: 'Account not found' });
+
+            if (user_email) {
+                const emailOwner = await getUserByEmail(user_email);
+                if (emailOwner && String(emailOwner.user_id) !== String(req_user_id)) {
+                    return response.status(409).json({ error: 'Account with this email already exists' });
+                }
+            }
+
+            const updates = pickFields(request.body, USER_PROFILE_FIELDS);
+            if (user_password) updates.user_password_hash = await bcrypt.hash(user_password, saltRounds);
+            updates.user_modified_datetime = new Date();
+
             await knex('users')
-                .where('user_id', user_id)
-                .update((user_password) ? 
-                {user_password_hash, user_modified_datetime: new Date(), ...rest} 
-                : {user_modified_datetime: new Date(), ...rest});
-            response.status(200).json({message: `Account(ID: ${user_id}) updated`});
+                .where('user_id', req_user_id)
+                .update(updates);
+            return response.status(200).json({message: `Account(ID: ${req_user_id}) updated`});
         } catch (error) {
-            throw error;
+            return sendServerError(response, error);
         }
     }
 
     //Delete a user (restricted to account owner or ADMIN)
     const deleteUser = async (request, response) => {
         const { user_id, user_role } = request.user;
-        const req_user_id = request.body.user_id;
+        const req_user_id = request.params.user_id;
         // Only the account owner or an admin can delete
         if ((user_id != req_user_id) && (user_role != 'ADMIN')) {
             response.status(403).json({ error: 'User unauthorized' });
             return;
         }
         try {
+            const existingUser = await getUserById(req_user_id);
+            if (!existingUser) return response.status(404).json({ error: 'Account not found' });
+
             // Cascade deletes (tokens, then user-owned products, then user)
-            await knex('tokens')
-                .where('token_user_id', req_user_id)
-                .del();
-            await knex('products')
-                .where('product_owner', req_user_id)
-                .del();
-            await knex('users')
-                .where('user_id', req_user_id)
-                .del();
-            response.status(200).json({ message: `Account(ID: ${req_user_id}) removed`});
+            await knex.transaction(async (trx) => {
+                await trx('tokens').where('token_user_id', req_user_id).del();
+                await trx('products').where('product_owner', req_user_id).del();
+                await trx('users').where('user_id', req_user_id).del();
+            });
+            return response.status(200).json({ message: `Account(ID: ${req_user_id}) removed`});
         } catch (error) {
-            throw error;
+            return sendServerError(response, error);
         }
     }
 
