@@ -133,11 +133,26 @@
 
   // Fetch Stripe session status 
   router.get('/session-status', middleware.authenticateToken, async (req, res) => {
-    const session = await stripe.checkout.sessions.retrieve(req.query.session_id);  
-    if (String(session.metadata?.user_id) !== String(req.user.user_id)) {
-      return res.status(403).json({ error: 'Checkout session does not belong to this user' });
+    if (typeof req.query.session_id !== 'string' || !req.query.session_id.trim()) {
+      return res.status(400).json({ error: 'Session ID is required' });
     }
-    return res.send({ status: session.status });
+    try {
+      const session = await stripe.checkout.sessions.retrieve(req.query.session_id);
+      if (String(session.metadata?.user_id) !== String(req.user.user_id)) {
+        return res.status(403).json({ error: 'Checkout session does not belong to this user' });
+      }
+      res.set('Cache-Control', 'no-store');
+      return res.send({
+        status: session.status,
+        paymentStatus: session.payment_status,
+        ...(session.status === 'open' ? { clientSecret: session.client_secret } : {}),
+      });
+    } catch (error) {
+      if (error.code === 'resource_missing') {
+        return res.status(404).json({ error: 'Checkout session not found' });
+      }
+      return res.status(502).json({ error: 'Unable to check payment status. Please retry.' });
+    }
   });
 
   // Stripe workbook

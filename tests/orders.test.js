@@ -135,6 +135,45 @@ describe("Order routes", () => {
     expect(mockStripeCreate).not.toHaveBeenCalled();
   });
 
+  test('resumes an open session only for its owner', async () => {
+    mockStripeRetrieve.mockResolvedValue({
+      status: 'open', payment_status: 'unpaid', client_secret: 'secret_resume',
+      metadata: { user_id: String(userId) },
+    });
+    const result = await request(app).get('/session-status?session_id=cs_resume')
+      .set('Authorization', `Bearer ${userToken}`);
+    expect(result.status).toBe(200);
+    expect(result.body).toEqual({ status: 'open', paymentStatus: 'unpaid', clientSecret: 'secret_resume' });
+    expect(result.headers['cache-control']).toBe('no-store');
+
+    const otherToken = makeAccessToken({ user_id: userId + 1, user_role: 'USER' });
+    const forbidden = await request(app).get('/session-status?session_id=cs_resume')
+      .set('Authorization', `Bearer ${otherToken}`);
+    expect(forbidden.status).toBe(403);
+    expect(forbidden.body.clientSecret).toBeUndefined();
+  });
+
+  test('does not expose a completed session secret', async () => {
+    mockStripeRetrieve.mockResolvedValue({
+      status: 'complete', payment_status: 'paid', client_secret: 'secret_paid',
+      metadata: { user_id: String(userId) },
+    });
+    const result = await request(app).get('/session-status?session_id=cs_paid')
+      .set('Authorization', `Bearer ${userToken}`);
+    expect(result.body).toEqual({ status: 'complete', paymentStatus: 'paid' });
+  });
+
+  test('status lookup reports missing IDs and Stripe outages safely', async () => {
+    const missing = await request(app).get('/session-status')
+      .set('Authorization', `Bearer ${userToken}`);
+    expect(missing.status).toBe(400);
+    mockStripeRetrieve.mockRejectedValueOnce(new Error('private Stripe details'));
+    const failed = await request(app).get('/session-status?session_id=cs_failed')
+      .set('Authorization', `Bearer ${userToken}`);
+    expect(failed.status).toBe(502);
+    expect(failed.body.error).not.toContain('private');
+  });
+
   test("uses the database price instead of a client-supplied price", async () => {
     mockStripeCreate.mockResolvedValue({
       id: "cs_test_server_price",
@@ -383,6 +422,21 @@ describe("Order routes", () => {
       orderItem.product_unit_amount * orderItem.product_quantity;
 
     expect(lineTotal).toBe(5000);
+
+    const history = await request(app).get('/api/v1/orders')
+      .set('Authorization', `Bearer ${userToken}`);
+    expect(history.status).toBe(200);
+    expect(history.body).toHaveLength(1);
+    expect(history.body[0].order_id).toBe(order.order_id);
+    expect(Number(history.body[0].item_count)).toBe(2);
+
+    const otherToken = makeAccessToken({ user_id: userId + 1, user_role: 'USER' });
+    const otherHistory = await request(app).get('/api/v1/orders')
+      .set('Authorization', `Bearer ${otherToken}`);
+    expect(otherHistory.body).toEqual([]);
+    const otherDetail = await request(app).get(`/api/v1/orders/${order.order_id}`)
+      .set('Authorization', `Bearer ${otherToken}`);
+    expect(otherDetail.status).toBe(404);
   });
 
   // ============================================================
